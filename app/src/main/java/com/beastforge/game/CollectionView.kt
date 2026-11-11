@@ -99,6 +99,13 @@ class CollectionView(context: Context) : View(context) {
                 if (isSelected) Color.rgb(55, 85, 125)
                 else Color.rgb(28, 34, 55)
             )
+            CreatureRenderer.draw(
+                canvas,
+                creature,
+                x + cardWidth - dp(35f),
+                y + dp(53f),
+                dp(19f)
+            )
 
             if (isSelected) {
                 paint.color = Color.rgb(100, 210, 255)
