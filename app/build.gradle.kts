@@ -6,27 +6,24 @@ plugins {
 
 android {
     namespace = "com.beastforge.game"
-
     compileSdk = 35
 
     defaultConfig {
         applicationId = "com.beastforge.game"
 
-        minSdk = 26
+        // Minimum supported Android version: Android 10
+        minSdk = 29
 
+        // Target Android version: Android 15
         targetSdk = 35
 
         versionCode = 1
-
         versionName = "1.0"
     }
 
     compileOptions {
-        sourceCompatibility =
-            JavaVersion.VERSION_17
-
-        targetCompatibility =
-            JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     kotlinOptions {
