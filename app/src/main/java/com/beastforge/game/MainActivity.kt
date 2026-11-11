@@ -1,4 +1,3 @@
-
 package com.beastforge.game
 
 import android.app.Activity
