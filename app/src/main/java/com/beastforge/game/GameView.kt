@@ -15,50 +15,76 @@ class GameView(context: Context) : View(context) {
     private var playerX = 0f
     private var playerY = 0f
 
-    private var initialized = false
-    private var lastFrame = 0L
+    private var enemyX = 0f
+    private var enemyY = 0f
 
-    private var joystickX = 0f
-    private var joystickY = 0f
-    private var joystickActive = false
+    private var playerHP = 100f
+    private var enemyHP = 100f
+    private var energy = 100f
 
     private var moveX = 0f
     private var moveY = 0f
 
-    private var attackUntil = 0L
-    private var energy = 100f
+    private var joystickActive = false
+    private var joystickX = 0f
+    private var joystickY = 0f
 
-    private var creaturePulse = 0f
+    private var initialized = false
+    private var lastFrame = 0L
 
-    private val floorPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private var lastPlayerAttack = 0L
+    private var lastEnemyAttack = 0L
 
-    private fun dp(value: Float) = value * density
+    private var attackEffectUntil = 0L
+    private var specialEffectUntil = 0L
+
+    private var gameOver = false
+    private var victory = false
+
+    private fun dp(v: Float) = v * density
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
 
-        val w = width.toFloat()
-        val h = height.toFloat()
+        if (width <= 0 || height <= 0) return
 
-        if (w <= 0f || h <= 0f) return
-
-        if (!initialized) {
-            playerX = w * 0.5f
-            playerY = h * 0.43f
-            initialized = true
-        }
+        if (!initialized) resetGame()
 
         updateGame()
 
-        drawBackground(canvas, w, h)
-        drawArena(canvas, w, h)
+        drawBackground(canvas)
         drawHeader(canvas)
-        drawCreature(canvas)
+        drawHealthBars(canvas)
+        drawCreature(canvas, playerX, playerY, false)
+        drawCreature(canvas, enemyX, enemyY, true)
+        drawEffects(canvas)
         drawJoystick(canvas)
-        drawControls(canvas)
-        drawStatus(canvas)
+        drawButtons(canvas)
 
-        postInvalidateOnAnimation()
+        if (gameOver) drawGameOver(canvas)
+
+        if (!gameOver) postInvalidateOnAnimation()
+    }
+
+    private fun resetGame() {
+        playerX = width * 0.5f
+        playerY = height * 0.61f
+
+        enemyX = width * 0.5f
+        enemyY = height * 0.34f
+
+        playerHP = 100f
+        enemyHP = 100f
+        energy = 100f
+
+        gameOver = false
+        victory = false
+
+        lastFrame = 0L
+        lastPlayerAttack = 0L
+        lastEnemyAttack = 0L
+
+        initialized = true
     }
 
     private fun updateGame() {
@@ -75,92 +101,103 @@ class GameView(context: Context) : View(context) {
 
         lastFrame = now
 
-        val speed = dp(190f)
+        if (gameOver) return
 
-        playerX += moveX * speed * delta
-        playerY += moveY * speed * delta
+        // Player movement
+
+        val playerSpeed = dp(190f)
+
+        playerX += moveX * playerSpeed * delta
+        playerY += moveY * playerSpeed * delta
 
         playerX = playerX.coerceIn(dp(35f), width - dp(35f))
-        playerY = playerY.coerceIn(height * 0.20f, height * 0.70f)
+        playerY = playerY.coerceIn(height * 0.23f, height * 0.72f)
 
-        creaturePulse += delta * 3f
+        // Enemy AI: follow the player
+
+        val dx = playerX - enemyX
+        val dy = playerY - enemyY
+        val distance = hypot(dx, dy)
+
+        if (distance > dp(65f)) {
+            val enemySpeed = dp(65f)
+
+            enemyX += dx / distance * enemySpeed * delta
+            enemyY += dy / distance * enemySpeed * delta
+        }
+
+        // Enemy automatic attack
+
+        if (distance < dp(85f) &&
+            now - lastEnemyAttack > 1_200_000_000L) {
+
+            playerHP = (playerHP - 8f).coerceAtLeast(0f)
+            lastEnemyAttack = now
+
+            if (playerHP <= 0f) {
+                gameOver = true
+                victory = false
+            }
+        }
+
+        // Energy regeneration
+
+        energy = (energy + 5f * delta).coerceAtMost(100f)
+
+        enemyX = enemyX.coerceIn(dp(35f), width - dp(35f))
+        enemyY = enemyY.coerceIn(height * 0.23f, height * 0.72f)
     }
 
-    private fun drawBackground(
-        canvas: Canvas,
-        w: Float,
-        h: Float
-    ) {
+    private fun drawBackground(canvas: Canvas) {
 
         paint.shader = LinearGradient(
-            0f, 0f, w, h,
-            Color.rgb(10, 13, 31),
-            Color.rgb(35, 19, 54),
+            0f, 0f,
+            width.toFloat(), height.toFloat(),
+            Color.rgb(9, 14, 32),
+            Color.rgb(42, 18, 48),
             Shader.TileMode.CLAMP
         )
 
-        canvas.drawRect(0f, 0f, w, h, paint)
-        paint.shader = null
-    }
-
-    private fun drawArena(
-        canvas: Canvas,
-        w: Float,
-        h: Float
-    ) {
-
-        paint.color = Color.rgb(25, 28, 52)
-
         canvas.drawRect(
-            0f, h * 0.17f,
-            w, h * 0.78f,
+            0f, 0f,
+            width.toFloat(), height.toFloat(),
             paint
         )
 
-        // Arena grid
+        paint.shader = null
 
-        paint.color = Color.argb(35, 100, 150, 255)
+        paint.color = Color.rgb(27, 31, 55)
+
+        canvas.drawRect(
+            0f, height * 0.18f,
+            width.toFloat(), height * 0.77f,
+            paint
+        )
+
+        paint.color = Color.argb(35, 120, 145, 255)
         paint.strokeWidth = dp(1f)
-
-        val gap = dp(40f)
 
         var x = 0f
 
-        while (x < w) {
+        while (x < width) {
             canvas.drawLine(
-                x, h * 0.17f,
-                x, h * 0.78f,
+                x, height * 0.18f,
+                x, height * 0.77f,
                 paint
             )
-            x += gap
+            x += dp(40f)
         }
 
-        var y = h * 0.17f
+        var y = height * 0.18f
 
-        while (y < h * 0.78f) {
+        while (y < height * 0.77f) {
             canvas.drawLine(
-                0f, y, w, y, paint
+                0f, y,
+                width.toFloat(), y,
+                paint
             )
-            y += gap
+            y += dp(40f)
         }
-
-        // Arena boundary
-
-        paint.color = Color.rgb(75, 88, 145)
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = dp(2f)
-
-        canvas.drawRoundRect(
-            dp(8f),
-            h * 0.18f,
-            w - dp(8f),
-            h * 0.77f,
-            dp(18f),
-            dp(18f),
-            paint
-        )
-
-        paint.style = Paint.Style.FILL
     }
 
     private fun drawHeader(canvas: Canvas) {
@@ -168,186 +205,213 @@ class GameView(context: Context) : View(context) {
         paint.color = Color.WHITE
         paint.textAlign = Paint.Align.CENTER
         paint.typeface = Typeface.DEFAULT_BOLD
-        paint.textSize = dp(25f)
+        paint.textSize = dp(23f)
 
         canvas.drawText(
             "BEASTFORGE",
             width / 2f,
-            dp(43f),
+            dp(39f),
             paint
         )
 
-        paint.color = Color.rgb(145, 170, 240)
+        paint.color = Color.rgb(150, 175, 230)
         paint.textSize = dp(11f)
 
         canvas.drawText(
-            "CREATURE FUSION ARENA",
+            "CREATURE BATTLE",
             width / 2f,
-            dp(64f),
+            dp(59f),
             paint
         )
     }
 
-    private fun drawCreature(canvas: Canvas) {
+    private fun drawHealthBars(canvas: Canvas) {
 
-        val size = dp(1f)
-        val pulse = sin(creaturePulse) * dp(3f)
-
-        // Magical glow
-
-        paint.color = Color.argb(40, 65, 125, 255)
-
-        canvas.drawCircle(
-            playerX, playerY,
-            dp(57f) + pulse,
-            paint
+        drawHealthBar(
+            canvas,
+            dp(16f),
+            dp(85f),
+            "SKY WOLF",
+            playerHP,
+            Color.rgb(55, 155, 255)
         )
 
-        // Shadow
-
-        paint.color = Color.argb(100, 0, 0, 0)
-
-        canvas.drawOval(
-            playerX - dp(36f),
-            playerY + dp(25f),
-            playerX + dp(36f),
-            playerY + dp(43f),
-            paint
+        drawHealthBar(
+            canvas,
+            width - dp(151f),
+            dp(85f),
+            "FIRE BEAST",
+            enemyHP,
+            Color.rgb(255, 85, 65)
         )
+    }
 
-        // Legs
+    private fun drawHealthBar(
+        canvas: Canvas,
+        x: Float,
+        y: Float,
+        name: String,
+        hp: Float,
+        color: Int
+    ) {
 
-        paint.color = Color.rgb(50, 76, 165)
+        val barWidth = dp(135f)
+
+        paint.color = Color.WHITE
+        paint.textAlign = Paint.Align.LEFT
+        paint.textSize = dp(12f)
+        paint.typeface = Typeface.DEFAULT_BOLD
+
+        canvas.drawText(name, x, y, paint)
+
+        paint.color = Color.DKGRAY
 
         canvas.drawRoundRect(
-            playerX - dp(23f),
-            playerY + dp(13f),
-            playerX - dp(9f),
-            playerY + dp(40f),
-            dp(6f), dp(6f), paint
+            x, y + dp(8f),
+            x + barWidth, y + dp(19f),
+            dp(5f), dp(5f), paint
         )
 
+        paint.color = color
+
         canvas.drawRoundRect(
-            playerX + dp(9f),
-            playerY + dp(13f),
-            playerX + dp(23f),
-            playerY + dp(40f),
-            dp(6f), dp(6f), paint
+            x, y + dp(8f),
+            x + barWidth * (hp / 100f),
+            y + dp(19f),
+            dp(5f), dp(5f), paint
         )
+
+        paint.color = Color.WHITE
+        paint.textSize = dp(9f)
+
+        canvas.drawText(
+            "${hp.toInt()}/100",
+            x, y + dp(34f), paint
+        )
+    }
+
+    private fun drawCreature(
+        canvas: Canvas,
+        x: Float,
+        y: Float,
+        enemy: Boolean
+    ) {
+
+        val mainColor = if (enemy)
+            Color.rgb(210, 75, 65)
+        else
+            Color.rgb(75, 115, 220)
+
+        val earColor = if (enemy)
+            Color.rgb(255, 130, 75)
+        else
+            Color.rgb(130, 165, 255)
+
+        paint.color = Color.argb(45, 100, 130, 255)
+
+        canvas.drawCircle(x, y, dp(51f), paint)
+
+        paint.color = mainColor
+
+        canvas.drawCircle(x, y, dp(33f), paint)
 
         // Ears
 
-        paint.color = Color.rgb(105, 145, 245)
+        paint.color = earColor
 
-        val leftEar = Path().apply {
-            moveTo(playerX - dp(29f), playerY - dp(17f))
-            lineTo(playerX - dp(26f), playerY - dp(48f))
-            lineTo(playerX - dp(7f), playerY - dp(29f))
+        val ears = Path().apply {
+            moveTo(x - dp(27f), y - dp(12f))
+            lineTo(x - dp(25f), y - dp(45f))
+            lineTo(x - dp(7f), y - dp(27f))
+            close()
+
+            moveTo(x + dp(27f), y - dp(12f))
+            lineTo(x + dp(25f), y - dp(45f))
+            lineTo(x + dp(7f), y - dp(27f))
             close()
         }
 
-        val rightEar = Path().apply {
-            moveTo(playerX + dp(29f), playerY - dp(17f))
-            lineTo(playerX + dp(26f), playerY - dp(48f))
-            lineTo(playerX + dp(7f), playerY - dp(29f))
-            close()
-        }
-
-        canvas.drawPath(leftEar, paint)
-        canvas.drawPath(rightEar, paint)
-
-        // Body
-
-        paint.color = Color.rgb(75, 105, 205)
-
-        canvas.drawCircle(
-            playerX, playerY,
-            dp(34f), paint
-        )
+        canvas.drawPath(ears, paint)
 
         // Face
-
-        paint.color = Color.rgb(125, 155, 245)
-
-        canvas.drawCircle(
-            playerX, playerY + dp(3f),
-            dp(23f), paint
-        )
-
-        // Eyes
 
         paint.color = Color.WHITE
 
         canvas.drawCircle(
-            playerX - dp(10f),
-            playerY - dp(4f),
+            x - dp(10f), y - dp(4f),
             dp(4f), paint
         )
 
         canvas.drawCircle(
-            playerX + dp(10f),
-            playerY - dp(4f),
+            x + dp(10f), y - dp(4f),
             dp(4f), paint
         )
 
         paint.color = Color.BLACK
 
         canvas.drawCircle(
-            playerX - dp(10f),
-            playerY - dp(4f),
+            x - dp(10f), y - dp(4f),
             dp(2f), paint
         )
 
         canvas.drawCircle(
-            playerX + dp(10f),
-            playerY - dp(4f),
+            x + dp(10f), y - dp(4f),
             dp(2f), paint
         )
 
-        // Name
-
         paint.color = Color.WHITE
         paint.textAlign = Paint.Align.CENTER
+        paint.textSize = dp(11f)
         paint.typeface = Typeface.DEFAULT_BOLD
-        paint.textSize = dp(13f)
 
         canvas.drawText(
-            "SKY WOLF",
-            playerX,
-            playerY + dp(65f),
-            paint
+            if (enemy) "FIRE BEAST" else "SKY WOLF",
+            x, y + dp(57f), paint
         )
+    }
+
+    private fun drawEffects(canvas: Canvas) {
+
+        val now = System.nanoTime()
+
+        if (now < attackEffectUntil) {
+            paint.color = Color.argb(180, 255, 180, 60)
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = dp(5f)
+
+            canvas.drawCircle(
+                enemyX, enemyY,
+                dp(48f), paint
+            )
+
+            paint.style = Paint.Style.FILL
+        }
+
+        if (now < specialEffectUntil) {
+            paint.color = Color.argb(100, 90, 160, 255)
+
+            canvas.drawCircle(
+                enemyX, enemyY,
+                dp(85f), paint
+            )
+        }
     }
 
     private fun drawJoystick(canvas: Canvas) {
 
-        val cx = dp(75f)
+        val cx = dp(72f)
         val cy = height - dp(105f)
 
-        paint.color = Color.argb(65, 180, 195, 255)
+        paint.color = Color.argb(80, 130, 160, 255)
 
-        canvas.drawCircle(
-            cx, cy, dp(49f), paint
-        )
+        canvas.drawCircle(cx, cy, dp(48f), paint)
 
-        paint.color = Color.argb(110, 100, 135, 230)
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = dp(2f)
+        val kx = if (joystickActive) joystickX else cx
+        val ky = if (joystickActive) joystickY else cy
 
-        canvas.drawCircle(
-            cx, cy, dp(49f), paint
-        )
+        paint.color = Color.rgb(95, 135, 245)
 
-        paint.style = Paint.Style.FILL
-
-        val knobX = if (joystickActive) joystickX else cx
-        val knobY = if (joystickActive) joystickY else cy
-
-        paint.color = Color.rgb(105, 145, 255)
-
-        canvas.drawCircle(
-            knobX, knobY, dp(21f), paint
-        )
+        canvas.drawCircle(kx, ky, dp(20f), paint)
 
         paint.color = Color.WHITE
         paint.textSize = dp(10f)
@@ -355,46 +419,36 @@ class GameView(context: Context) : View(context) {
 
         canvas.drawText(
             "MOVE",
-            cx,
-            cy + dp(70f),
-            paint
+            cx, cy + dp(67f), paint
         )
     }
 
-    private fun drawControls(canvas: Canvas) {
+    private fun drawButtons(canvas: Canvas) {
 
-        val attackX = width - dp(75f)
-        val attackY = height - dp(112f)
+        val attackX = width - dp(72f)
+        val attackY = height - dp(100f)
 
-        val specialX = width - dp(75f)
-        val specialY = height - dp(220f)
+        val specialX = width - dp(72f)
+        val specialY = height - dp(205f)
 
-        // Attack button
-
-        paint.color = if (System.nanoTime() < attackUntil)
-            Color.rgb(255, 145, 65)
-        else
-            Color.rgb(185, 65, 75)
+        paint.color = Color.rgb(190, 65, 65)
 
         canvas.drawCircle(
-            attackX, attackY, dp(35f), paint
+            attackX, attackY,
+            dp(36f), paint
         )
 
         paint.color = Color.WHITE
-        paint.textSize = dp(12f)
         paint.textAlign = Paint.Align.CENTER
+        paint.textSize = dp(11f)
         paint.typeface = Typeface.DEFAULT_BOLD
 
         canvas.drawText(
             "ATTACK",
-            attackX,
-            attackY + dp(4f),
-            paint
+            attackX, attackY + dp(4f), paint
         )
 
-        // Special button
-
-        paint.color = Color.rgb(90, 80, 205)
+        paint.color = Color.rgb(90, 80, 210)
 
         canvas.drawCircle(
             specialX, specialY,
@@ -405,112 +459,152 @@ class GameView(context: Context) : View(context) {
 
         canvas.drawText(
             "SPECIAL",
-            specialX,
-            specialY + dp(4f),
+            specialX, specialY + dp(4f), paint
+        )
+    }
+
+    private fun drawGameOver(canvas: Canvas) {
+
+        paint.color = Color.argb(205, 0, 0, 0)
+
+        canvas.drawRect(
+            0f, 0f,
+            width.toFloat(), height.toFloat(),
+            paint
+        )
+
+        paint.color = if (victory)
+            Color.rgb(90, 220, 140)
+        else
+            Color.rgb(255, 90, 90)
+
+        paint.textAlign = Paint.Align.CENTER
+        paint.textSize = dp(32f)
+        paint.typeface = Typeface.DEFAULT_BOLD
+
+        canvas.drawText(
+            if (victory) "VICTORY!" else "DEFEAT!",
+            width / 2f,
+            height / 2f,
+            paint
+        )
+
+        paint.color = Color.WHITE
+        paint.textSize = dp(16f)
+
+        canvas.drawText(
+            "Tap anywhere to play again",
+            width / 2f,
+            height / 2f + dp(42f),
             paint
         )
     }
 
-    private fun drawStatus(canvas: Canvas) {
+    private fun attack() {
 
-        val left = dp(20f)
-        val top = dp(91f)
-        val barWidth = dp(145f)
+        val now = System.nanoTime()
 
-        paint.color = Color.WHITE
-        paint.textSize = dp(11f)
-        paint.textAlign = Paint.Align.LEFT
-        paint.typeface = Typeface.DEFAULT_BOLD
+        if (now - lastPlayerAttack < 600_000_000L) return
 
-        canvas.drawText(
-            "SKY WOLF  LV.1",
-            left, top, paint
+        lastPlayerAttack = now
+
+        val distance = hypot(
+            playerX - enemyX,
+            playerY - enemyY
         )
 
-        // Energy background
+        if (distance < dp(125f)) {
+            enemyHP = (enemyHP - 15f).coerceAtLeast(0f)
+            attackEffectUntil = now + 250_000_000L
+        }
 
-        paint.color = Color.DKGRAY
+        checkVictory()
+    }
 
-        canvas.drawRoundRect(
-            left, top + dp(9f),
-            left + barWidth, top + dp(17f),
-            dp(5f), dp(5f), paint
+    private fun specialAttack() {
+
+        if (energy < 25f) return
+
+        energy -= 25f
+
+        val distance = hypot(
+            playerX - enemyX,
+            playerY - enemyY
         )
 
-        // Energy amount
+        if (distance < dp(220f)) {
+            enemyHP = (enemyHP - 35f).coerceAtLeast(0f)
+            specialEffectUntil = System.nanoTime() +
+                450_000_000L
+        }
 
-        paint.color = Color.rgb(80, 170, 255)
+        checkVictory()
+    }
 
-        canvas.drawRoundRect(
-            left, top + dp(9f),
-            left + barWidth * (energy / 100f),
-            top + dp(17f),
-            dp(5f), dp(5f), paint
-        )
+    private fun checkVictory() {
+
+        if (enemyHP <= 0f) {
+            gameOver = true
+            victory = true
+        }
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
 
-        val cx = dp(75f)
+        val cx = dp(72f)
         val cy = height - dp(105f)
 
-        val attackX = width - dp(75f)
-        val attackY = height - dp(112f)
+        val attackX = width - dp(72f)
+        val attackY = height - dp(100f)
 
-        val specialX = width - dp(75f)
-        val specialY = height - dp(220f)
+        val specialX = width - dp(72f)
+        val specialY = height - dp(205f)
 
         when (event.action) {
 
-            MotionEvent.ACTION_DOWN,
-            MotionEvent.ACTION_MOVE -> {
+            MotionEvent.ACTION_DOWN -> {
 
-                val dx = event.x - cx
-                val dy = event.y - cy
+                if (gameOver) {
+                    resetGame()
+                    invalidate()
+                    return true
+                }
+
+                if (hypot(
+                        event.x - attackX,
+                        event.y - attackY
+                    ) < dp(43f)) {
+
+                    attack()
+                    invalidate()
+                    return true
+                }
+
+                if (hypot(
+                        event.x - specialX,
+                        event.y - specialY
+                    ) < dp(38f)) {
+
+                    specialAttack()
+                    invalidate()
+                    return true
+                }
 
                 if (event.x < width * 0.48f &&
                     event.y > height * 0.58f) {
 
                     joystickActive = true
-
-                    val distance = hypot(dx, dy)
-                        .coerceAtLeast(1f)
-
-                    val limited = min(distance, dp(49f))
-
-                    joystickX = cx + dx / distance * limited
-                    joystickY = cy + dy / distance * limited
-
-                    moveX = dx / distance *
-                        (limited / dp(49f))
-
-                    moveY = dy / distance *
-                        (limited / dp(49f))
-
-                } else {
-                    joystickActive = false
-                    moveX = 0f
-                    moveY = 0f
+                    updateJoystick(event.x, event.y, cx, cy)
                 }
 
-                if (event.action == MotionEvent.ACTION_DOWN) {
+                invalidate()
+                return true
+            }
 
-                    if (hypot(
-                            event.x - attackX,
-                            event.y - attackY
-                        ) < dp(42f)) {
+            MotionEvent.ACTION_MOVE -> {
 
-                        attackUntil = System.nanoTime() +
-                            350_000_000L
-                    }
-
-                    if (hypot(
-                            event.x - specialX,
-                            event.y - specialY
-                        ) < dp(38f) && energy >= 25f) {
-
-                        energy -= 25f
-                    }
+                if (joystickActive) {
+                    updateJoystick(event.x, event.y, cx, cy)
                 }
 
                 invalidate()
@@ -530,5 +624,25 @@ class GameView(context: Context) : View(context) {
         }
 
         return true
+    }
+
+    private fun updateJoystick(
+        x: Float,
+        y: Float,
+        cx: Float,
+        cy: Float
+    ) {
+
+        val dx = x - cx
+        val dy = y - cy
+
+        val distance = hypot(dx, dy).coerceAtLeast(1f)
+        val limited = min(distance, dp(48f))
+
+        joystickX = cx + dx / distance * limited
+        joystickY = cy + dy / distance * limited
+
+        moveX = dx / distance * limited / dp(48f)
+        moveY = dy / distance * limited / dp(48f)
     }
 }
