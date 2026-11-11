@@ -9,7 +9,10 @@ import android.graphics.Typeface
 import android.view.MotionEvent
 import android.view.View
 
-class CollectionView(context: Context) : View(context) {
+class CollectionView(
+    context: Context,
+    private val onCreatureDetails: (Creature) -> Unit
+) : View(context) {
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val density = resources.displayMetrics.density
@@ -20,6 +23,7 @@ class CollectionView(context: Context) : View(context) {
 
     private var message = "Select two creatures to fuse"
     private var scrollY = 0f
+    private var touchDownTime = 0L
 
     private fun dp(value: Float) = value * density
 
@@ -167,6 +171,7 @@ class CollectionView(context: Context) : View(context) {
         when (event.action) {
 
             MotionEvent.ACTION_DOWN -> {
+                touchDownTime = event.eventTime
                 return true
             }
 
