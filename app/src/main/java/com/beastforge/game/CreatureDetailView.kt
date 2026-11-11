@@ -178,6 +178,7 @@ class CreatureDetailView(
         )
 
         drawText(
+            canvas,
             getAbility(),
             dp(30f), dp(700f),
             13f, Color.WHITE
