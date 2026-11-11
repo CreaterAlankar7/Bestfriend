@@ -1,3 +1,4 @@
+
 package com.beastforge.game
 
 import android.app.Activity
@@ -6,12 +7,10 @@ import android.graphics.Color
 
 class MainActivity : Activity() {
 
+    private lateinit var collectionView: CollectionView
+
     private fun showCollection() {
-        setContentView(
-            CollectionView(this) { creature ->
-                showCreatureDetails(creature)
-            }
-        )
+        setContentView(collectionView)
     }
 
     private fun showCreatureDetails(creature: Creature) {
@@ -27,6 +26,10 @@ class MainActivity : Activity() {
 
         window.statusBarColor = Color.rgb(12, 15, 30)
         window.navigationBarColor = Color.rgb(12, 15, 30)
+
+        collectionView = CollectionView(this) { creature ->
+            showCreatureDetails(creature)
+        }
 
         showCollection()
     }
