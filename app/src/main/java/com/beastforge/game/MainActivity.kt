@@ -10,13 +10,10 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        window.statusBarColor = Color.rgb(15, 18, 35)
-        window.navigationBarColor = Color.rgb(15, 18, 35)
+        window.statusBarColor = Color.rgb(12, 15, 30)
+        window.navigationBarColor = Color.rgb(12, 15, 30)
 
-        window.decorView.systemUiVisibility = 0
-
-        val gameView = GameView(this)
-
-        setContentView(gameView)
+        val collectionView = CollectionView(this)
+        setContentView(collectionView)
     }
 }
